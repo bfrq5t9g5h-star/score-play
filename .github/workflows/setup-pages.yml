@@ -1,0 +1,30 @@
+name: Setup GitHub Pages
+
+on:
+  workflow_dispatch:
+
+permissions:
+  pages: write
+  administration: write
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              await github.rest.repos.createPagesSite({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                build_type: "workflow",
+              });
+              core.info("GitHub Pages enabled with GitHub Actions source.");
+            } catch (error) {
+              if (error.status === 409) {
+                core.info("GitHub Pages already enabled.");
+                return;
+              }
+              core.setFailed(error.message);
+            }
