@@ -9,7 +9,6 @@ permissions:
   contents: read
   pages: write
   id-token: write
-  administration: write
 
 concurrency:
   group: pages
@@ -19,19 +18,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Enable GitHub Pages (workflow source)
-        uses: actions/github-script@v7
-        with:
-          script: |
-            try {
-              await github.rest.repos.createPagesSite({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                build_type: "workflow",
-              });
-            } catch (error) {
-              if (error.status !== 409) throw error;
-            }
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
