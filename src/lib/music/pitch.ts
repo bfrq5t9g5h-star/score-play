@@ -49,14 +49,14 @@ export function applyKeySignature(midi: number, accidentalByPitchClass: Record<n
 }
 
 export function durationGlyph(quarters: number): string {
-  if (quarters >= 4) return "ᆝ";
-  if (quarters >= 3) return "𝅚.";
-  if (quarters >= 2) return "𝅚";
-  if (quarters >= 1.5) return "♩.";
-  if (quarters >= 1) return "♩";
-  if (quarters >= 0.75) return "♪.";
-  if (quarters >= 0.5) return "♪";
-  return "♬";
+  if (quarters >= 4) return "\u1D15D";
+  if (quarters >= 3) return "\u1D15E.";
+  if (quarters >= 2) return "\u1D15E";
+  if (quarters >= 1.5) return "\u2669.";
+  if (quarters >= 1) return "\u2669";
+  if (quarters >= 0.75) return "\u266A.";
+  if (quarters >= 0.5) return "\u266A";
+  return "\u266C";
 }
 
 export function durationLabel(quarters: number): string {
