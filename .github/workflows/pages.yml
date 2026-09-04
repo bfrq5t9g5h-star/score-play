@@ -2,14 +2,14 @@ name: GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
   contents: read
   pages: write
   id-token: write
-  administration: write
 
 concurrency:
   group: pages
@@ -22,15 +22,18 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
-      - run: npm install
-      - uses: actions/cache@v4
+          node-version: "22"
+      - name: Install dependencies
+        run: npm install
+      - name: Cache oemer ONNX weights
+        uses: actions/cache@v4
         with:
           path: public/oemer
           key: oemer-onnx-checkpoints-v1
-      - run: node scripts/ensure-oemer-models.mjs
-      - run: npm run build
+      - name: Download oemer models
+        run: node scripts/ensure-oemer-models.mjs
+      - name: Build static site
+        run: npm run build
         env:
           NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
       - uses: actions/upload-pages-artifact@v3
