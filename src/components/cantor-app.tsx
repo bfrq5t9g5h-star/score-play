@@ -29,9 +29,13 @@ import { Slider } from "@/components/ui/slider";
 import { scorePlayer, type Voice } from "@/lib/audio/player";
 import { durationGlyph, durationLabel } from "@/lib/music/pitch";
 import { dataUrlFromRgba, captureVideoFrame, rgbaFromFile } from "@/lib/omr/load";
+import { scaleRgba, scaleToMaxPixels } from "@/lib/omr/image";
+import { prepareBinary } from "@/lib/omr/preprocess";
+import { cancelOemer, runOemer } from "@/lib/omr/oemer/client";
+import { TARGET_PIXELS } from "@/lib/omr/oemer/constants";
 import { recognizeSheet, retune, sequenceNotes } from "@/lib/omr/recognize";
 import { groupSystems } from "@/lib/omr/staff";
-import type { KeyName, RecognitionResult } from "@/lib/omr/types";
+import type { KeyName, RecognitionResult, RgbaImage } from "@/lib/omr/types";
 import { HYMNS } from "@/lib/sheet/hymns";
 import { renderHymn } from "@/lib/sheet/render";
 import { SheetStage } from "@/components/sheet-stage";
@@ -54,6 +58,7 @@ export function CantorApp() {
   const [preview, setPreview] = useState<string | null>(null);
   const [result, setResult] = useState<RecognitionResult | null>(null);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<{ message: string; percent: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [key, setKey] = useState<KeyName>("C");
   const [tempo, setTempo] = useState(80);
@@ -63,11 +68,14 @@ export function CantorApp() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     return () => {
       scorePlayer.stop();
       streamRef.current?.getTracks().forEach((t) => t.stop());
+      abortRef.current?.abort();
+      cancelOemer();
     };
   }, []);
 
@@ -79,26 +87,93 @@ export function CantorApp() {
     void video.play();
   }, [cameraOpen]);
 
-  async function analyze(image: Parameters<typeof recognizeSheet>[0], deskew = true) {
+  async function analyze(image: RgbaImage, opts: { deskew?: boolean; useOemer?: boolean } = {}) {
+    abortRef.current?.abort();
+    const abort = new AbortController();
+    abortRef.current = abort;
     setBusy(true);
+    setProgress({ message: "Preparing the page…", percent: 4 });
     setError(null);
     setActiveIds([]);
     setSelectedId(null);
     scorePlayer.stop();
     setPlaying(false);
     await new Promise((r) => setTimeout(r, 30));
+    const extraWarnings: string[] = [];
     try {
-      const next = recognizeSheet(image, { key, deskew });
-      setResult(next);
-      setPreview(dataUrlFromRgba(next.image));
-      if (next.notes.length === 0 && next.staves.length === 0) {
-        setError(next.warnings[0] ?? "Could not read that page.");
+      let prepared = scaleRgba(image, 1800);
+      if (opts.deskew !== false) {
+        const deskewed = prepareBinary(prepared);
+        prepared = deskewed.prepared;
+        if (Math.abs(deskewed.angle) >= 0.5) {
+          extraWarnings.push(`Straightened the page by ${deskewed.angle.toFixed(1)}°.`);
+        }
+      }
+      prepared = scaleToMaxPixels(prepared, TARGET_PIXELS);
+
+      if (opts.useOemer) {
+        try {
+          const neural = await runOemer(prepared, key, {
+            onProgress: setProgress,
+            signal: abort.signal,
+          });
+          if (abort.signal.aborted) return;
+          if (neural.notes.length > 0) {
+            setResult({
+              ...neural,
+              image: prepared,
+              warnings: [...extraWarnings, ...neural.warnings],
+              engine: "oemer",
+            });
+            setPreview(dataUrlFromRgba(prepared));
+            return;
+          }
+          extraWarnings.push(
+            neural.warnings[0] ??
+              "The neural reader found no playable notes. Trying the classic reader…",
+          );
+          setProgress({ message: "Trying the classic reader…", percent: 92 });
+        } catch (err) {
+          if (abort.signal.aborted || (err instanceof Error && err.message === "cancelled")) return;
+          extraWarnings.push(
+            err instanceof Error
+              ? `${err.message} Using the classic reader.`
+              : "Neural reader unavailable. Using the classic reader.",
+          );
+          setProgress({ message: "Trying the classic reader…", percent: 92 });
+        }
+      }
+
+      const next = recognizeSheet(prepared, { key, deskew: false });
+      if (abort.signal.aborted) return;
+      const merged: RecognitionResult = {
+        ...next,
+        warnings: [...extraWarnings, ...next.warnings],
+        engine: next.engine ?? "classical",
+      };
+      setResult(merged);
+      setPreview(dataUrlFromRgba(merged.image));
+      if (merged.notes.length === 0 && merged.staves.length === 0) {
+        setError(merged.warnings[0] ?? "Could not read that page.");
+      } else if (merged.notes.length === 0) {
+        setError(merged.warnings.find((w) => w.toLowerCase().includes("note")) ?? "Found the staff, but no notes to play.");
       }
     } catch (err) {
+      if (abort.signal.aborted) return;
       setError(err instanceof Error ? err.message : "Reading failed.");
     } finally {
-      setBusy(false);
+      if (!abort.signal.aborted) {
+        setBusy(false);
+        setProgress(null);
+      }
     }
+  }
+
+  function cancelRead() {
+    abortRef.current?.abort();
+    cancelOemer();
+    setBusy(false);
+    setProgress(null);
   }
 
   async function onFile(file: File | undefined) {
@@ -107,7 +182,7 @@ export function CantorApp() {
     setError(null);
     try {
       const image = await rgbaFromFile(file);
-      await analyze(image, true);
+      await analyze(image, { deskew: true, useOemer: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not open that image.");
       setBusy(false);
@@ -124,7 +199,7 @@ export function CantorApp() {
     await new Promise((r) => setTimeout(r, 20));
     try {
       const { image } = renderHymn(hymn);
-      await analyze(image, false);
+      await analyze(image, { deskew: false, useOemer: false });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not draw that sample.");
       setBusy(false);
@@ -159,7 +234,7 @@ export function CantorApp() {
     if (!videoRef.current || videoRef.current.readyState < 2) return;
     const image = captureVideoFrame(videoRef.current);
     closeCamera();
-    await analyze(image, true);
+    await analyze(image, { deskew: true, useOemer: true });
   }
 
   function changeKey(next: KeyName) {
@@ -256,11 +331,20 @@ export function CantorApp() {
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
             <section className="min-w-0 space-y-3">
               {busy ? (
-                <div className="flex min-h-72 items-center justify-center rounded-xl border border-dashed border-[oklch(0.72_0.04_70)] bg-[#f7f1e3]/70">
+                <div className="flex min-h-72 flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-[oklch(0.72_0.04_70)] bg-[#f7f1e3]/70 px-6">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="size-4 animate-spin" />
-                    Finding the staff and note heads…
+                    {progress?.message ?? "Finding the staff and note heads…"}
                   </div>
+                  <div className="h-1.5 w-full max-w-sm overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full bg-primary transition-[width]"
+                      style={{ width: `${Math.max(4, progress?.percent ?? 8)}%` }}
+                    />
+                  </div>
+                  <Button variant="outline" size="sm" onClick={cancelRead}>
+                    Cancel
+                  </Button>
                 </div>
               ) : preview ? (
                 <SheetStage
@@ -304,6 +388,9 @@ export function CantorApp() {
                       {result.notes.filter((n) => !n.muted).length} notes
                     </Badge>
                     <Badge variant="outline">{result.staves.length} staff</Badge>
+                    <Badge variant="outline">
+                      {result.engine === "oemer" ? "Neural reader" : "Classic reader"}
+                    </Badge>
                   </div>
                   <div className="mt-3 grid gap-3 sm:grid-cols-3">
                     <label className="block text-xs font-medium text-muted-foreground">
@@ -401,16 +488,16 @@ export function CantorApp() {
                       </ol>
                     ) : (
                       <p className="text-sm text-muted-foreground">
-                        {busy ? "Reading…" : "No notes yet."}
+                        {busy ? progress?.message ?? "Reading…" : "No notes yet."}
                       </p>
                     )}
                   </ScrollArea>
                 </CardContent>
               </Card>
               <p className="text-xs leading-relaxed text-muted-foreground">
-                Best on a flat scan or a square photo of a hymn or chant: one staff, dark ink, even
-                light. Fancy engravings, dense polyphony, and heavy perspective still confuse the
-                reader.
+                Photographs and uploads use a neural reader (oemer) in your browser — the first
+                visit downloads about 100&nbsp;MB of models, then they stay cached. Sample staves
+                use the faster classic reader. You can mute or delete stray heads before playing.
               </p>
             </aside>
           </div>
@@ -465,8 +552,9 @@ function EmptyState({
           Get a scan of a hymn. Hear the notes.
         </p>
         <p className="max-w-xl text-base text-muted-foreground sm:text-lg">
-          Cantor looks for staff lines and note heads on a page of simple music — hymns, chants,
-          doxologies — then plays what it read. Start with a sample, or use your own scan.
+          Photograph a hymnal page and Cantor will run a neural reader in your browser, then play
+          the notes. The first photo downloads the reader (about 100&nbsp;MB); after that it is
+          cached. Start with a sample if you just want to hear playback.
         </p>
       </div>
 
@@ -486,7 +574,8 @@ function EmptyState({
       <div>
         <h2 className="font-heading text-xl">Try a public-domain staff</h2>
         <p className="mb-4 text-sm text-muted-foreground">
-          These are drawn in the browser, then run through the same reader as a photograph.
+          These are drawn in the browser and read with the classic staff finder — no model
+          download.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           {HYMNS.map((hymn) => (
