@@ -3,45 +3,11 @@ import { detectNotes } from "./notes";
 import { binarize, prepareBinary } from "./preprocess";
 import { toGray, scaleRgba } from "./image";
 import { detectStaves, groupSystems, removeStaffLines } from "./staff";
-import type {
-  DetectedNote,
-  KeyName,
-  RecognitionResult,
-  RgbaImage,
-  ScoreEvent,
-} from "./types";
+import type { KeyName, RecognitionResult, RgbaImage } from "./types";
 import { KEY_ACCIDENTALS } from "./types";
+import { sequenceNotes } from "./sequence";
 
-export function sequenceNotes(
-  notes: DetectedNote[],
-  systems: number[][],
-  spaceByStaff: number[],
-): ScoreEvent[] {
-  const events: ScoreEvent[] = [];
-  let time = 0;
-  for (const staffIds of systems) {
-    const idSet = new Set(staffIds);
-    const systemNotes = notes.filter((n) => idSet.has(n.staffIndex)).sort((a, b) => a.x - b.x);
-    if (systemNotes.length === 0) continue;
-    const avgSpace =
-      staffIds.reduce((s, id) => s + (spaceByStaff[id] || 12), 0) / staffIds.length;
-    const columns: DetectedNote[][] = [];
-    for (const note of systemNotes) {
-      const last = columns[columns.length - 1];
-      if (last && Math.abs(note.x - last.reduce((s, n) => s + n.x, 0) / last.length) < avgSpace * 0.48) {
-        last.push(note);
-      } else {
-        columns.push([note]);
-      }
-    }
-    for (const column of columns) {
-      const quarters = Math.min(...column.map((n) => n.quarters));
-      events.push({ time, quarters, notes: column });
-      time += quarters;
-    }
-  }
-  return events;
-}
+export { sequenceNotes };
 
 export function recognizeSheet(
   image: RgbaImage,
@@ -76,6 +42,7 @@ export function recognizeSheet(
       warnings: [
         "No staff lines found. Try a flatter, higher-contrast scan with the full staff in frame.",
       ],
+      engine: "classical",
     };
   }
 
@@ -97,6 +64,7 @@ export function recognizeSheet(
     notes,
     events,
     warnings,
+    engine: "classical",
   };
 }
 

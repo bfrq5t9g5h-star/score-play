@@ -1,6 +1,7 @@
 import { applyKeySignature, midiFromStaffSteps, midiToName } from "../music/pitch";
 import { paintCMajorScale, paintOpenNotes } from "./paint";
 import { recognizeSheet } from "./recognize";
+import { runOemerDecodeSelfTest } from "./oemer/decode-self-test";
 
 function assert(cond: unknown, message: string) {
   if (!cond) throw new Error(message);
@@ -52,5 +53,6 @@ export function runSelfTest(): string[] {
   assert(openSorted[0].quarters >= 2, `half note duration ${openSorted[0]?.quarters}`);
   logs.push(`open ${openSorted.map((n) => `${n.name}:${n.quarters}`).join(" ")}`);
   logs.push(`scale ${sequence.map(midiToName).join(" ")}`);
+  logs.push(...runOemerDecodeSelfTest());
   return logs;
 }

@@ -59,6 +59,8 @@ export interface ScoreEvent {
   notes: DetectedNote[];
 }
 
+export type RecognitionEngine = "oemer" | "classical";
+
 export interface RecognitionResult {
   width: number;
   height: number;
@@ -67,6 +69,7 @@ export interface RecognitionResult {
   notes: DetectedNote[];
   events: ScoreEvent[];
   warnings: string[];
+  engine?: RecognitionEngine;
 }
 
 export type KeyName =
