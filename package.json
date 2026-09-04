@@ -8,6 +8,10 @@
   "scripts": {
     "dev": "next dev --port 38471",
     "build": "next build",
+    "predev": "npm run build:worker",
+    "prebuild": "npm run build:worker && node scripts/ensure-oemer-models.mjs",
+    "build:worker": "esbuild src/lib/omr/oemer/oemer.worker.ts --bundle --outfile=public/oemer-worker.js --format=iife --platform=browser --target=es2022 --banner:js=\"importScripts('https://cdn.jsdelivr.net/npm/onnxruntime-web@1.29.0/dist/ort.min.js');\"",
+    "models": "node scripts/ensure-oemer-models.mjs",
     "start": "serve out --listen 38471",
     "lint": "eslint",
     "test": "tsx src/lib/omr/run-self-test.ts"
@@ -31,6 +35,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "esbuild": "^0.28.2",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
     "tailwindcss": "^4",

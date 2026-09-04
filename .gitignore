@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# onnx models fetched at build/dev time — do not commit
+/public/oemer/*.onnx

@@ -9,6 +9,7 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  administration: write
 
 concurrency:
   group: pages
@@ -23,7 +24,12 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      - run: npm install
+      - uses: actions/cache@v4
+        with:
+          path: public/oemer
+          key: oemer-onnx-checkpoints-v1
+      - run: node scripts/ensure-oemer-models.mjs
       - run: npm run build
         env:
           NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}

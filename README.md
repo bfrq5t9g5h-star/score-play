@@ -4,28 +4,27 @@ Photograph or upload a page of simple sheet music — hymns, chants, doxologies 
 
 You do **not** need to install it on your computer. It is a website.
 
-## Easiest: publish a link
+## Live site (GitHub Pages)
 
-In this Cursor chat, click **Publish**. That puts Cantor on Vercel. Open the URL it gives you on your phone or laptop — photograph a hymn, or try a sample, and hit Play.
+**https://bfrq5t9g5h-star.github.io/score-play/**
 
-The source is here (private; you can change that in settings):  
-https://cursor.com/codebase/david-coppock/score-play
+Repo: https://github.com/bfrq5t9g5h-star/score-play
 
-## GitHub Pages
+If the link 404s, open [Settings → Pages](https://github.com/bfrq5t9g5h-star/score-play/settings/pages), set **Source** to **GitHub Actions**, then re-run the [Pages workflow](https://github.com/bfrq5t9g5h-star/score-play/actions/workflows/pages.yml).
 
-This project is on Origin, not GitHub.com yet. To host it on GitHub:
+## Easiest in Cursor
 
-1. Create a new GitHub repository (for example `score-play`).
-2. Push this code to `main`.
-3. GitHub → **Settings → Pages → Source: GitHub Actions**.
-4. The workflow in `.github/workflows/pages.yml` builds the static site and publishes it to  
-   `https://<your-username>.github.io/score-play/`
+Use **Preview** or the **Desktop** tab in this chat — no hosting account needed.
 
-There is no “Run” button on GitHub that starts the app. Pages is just a public website. Codespaces would still be a cloud terminal.
+## GitHub Pages (your own account)
 
-## Downloadable files
+To host under your GitHub username instead:
 
-A zip of HTML/JS cannot be double-clicked reliably: the camera and audio need `http://` or `https://`, not `file://`. Publish or GitHub Pages is the download-shaped option — a URL instead of an installer.
+1. Fork https://github.com/bfrq5t9g5h-star/score-play to your account (or create `score-play` and push this code).
+2. **Settings → Pages → Source: GitHub Actions**.
+3. Your URL: `https://<your-username>.github.io/score-play/`
+
+The workflow is in `.github/workflows/pages.yml`.
 
 ## Run locally (optional)
 
@@ -33,22 +32,27 @@ You need **Node 20 or newer** (`node -v`). Then:
 
 ```bash
 npm install
+npm run models    # once: downloads oemer ONNX weights (~104 MB, gitignored)
 npm run build
 npm start
 ```
 
 Open [http://localhost:38471](http://localhost:38471) — not port 3000.
 
-It is built for **clear scans of straightforward notation**: five-line staves, filled and open note heads, stems. Dense piano scores, heavy perspective, and faint photocopies will miss notes. You can tap a detected head to mute or delete it before playing.
+`npm run build` downloads the weights automatically if they are missing.
 
 ## How the reader works
 
-1. Straighten the page and threshold the ink.
-2. Find five evenly spaced staff lines.
-3. Lift the staff lines off the note heads.
-4. Score elliptical blobs sitting on lines and spaces as pitches.
-5. Use stems, filled vs open heads, and dots for duration.
-6. Play left-to-right, sounding simultaneous heads as chords.
+Photographs and uploads use **[oemer](https://github.com/BreezeWhite/oemer)** (MIT), a pretrained pair of ONNX U-Nets, entirely in the browser:
+
+1. First visit fetches the two published checkpoints (about 67 MB + 37 MB) from this site, then caches them.
+2. A Web Worker runs the networks with onnxruntime-web (WebGPU when the browser has it, otherwise single-thread WASM — GitHub Pages cannot set COOP/COEP).
+3. Staff-line and note-head heatmaps are decoded into pitches and durations.
+4. The existing Tone.js player sounds the notes.
+
+If the neural reader cannot load, times out, or returns nothing, Cantor falls back to the classic projection reader. Sample hymns stay on that classic path so they play without a model download.
+
+Dense SATB hymnals and warped photos are still hard. You can tap a detected head to mute or delete it before playing.
 
 ```bash
 npm test
@@ -56,4 +60,4 @@ npm test
 
 ## Stack
 
-Next.js (static export), TypeScript, Tailwind, shadcn/ui, Tone.js. Recognition runs in the browser.
+Next.js (static export), TypeScript, Tailwind, shadcn/ui, Tone.js, onnxruntime-web, oemer ONNX checkpoints. Recognition runs in the browser with no backend.
