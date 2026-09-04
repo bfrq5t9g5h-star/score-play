@@ -12,8 +12,8 @@ function horizontalProjection(image: BinaryImage): Float64Array {
   return proj;
 }
 
-function clusterPeaks(proj: Float64Array, width: number): StaffLine[] {
-  const threshold = Math.max(width * 0.18, 8);
+function clusterPeaks(proj: Float64Array, width: number, inkRatio: number): StaffLine[] {
+  const threshold = Math.max(width * inkRatio, 8);
   const lines: StaffLine[] = [];
   let y = 0;
   while (y < proj.length) {
@@ -40,7 +40,7 @@ function clusterPeaks(proj: Float64Array, width: number): StaffLine[] {
   return lines;
 }
 
-function spacingScore(ys: number[]): { space: number; ok: boolean } {
+function spacingScore(ys: number[], maxCv: number): { space: number; ok: boolean } {
   if (ys.length !== 5) return { space: 0, ok: false };
   const gaps: number[] = [];
   for (let i = 1; i < 5; i++) gaps.push(ys[i] - ys[i - 1]);
@@ -49,12 +49,17 @@ function spacingScore(ys: number[]): { space: number; ok: boolean } {
   let varSum = 0;
   for (const g of gaps) varSum += (g - mean) ** 2;
   const cv = Math.sqrt(varSum / gaps.length) / mean;
-  return { space: mean, ok: cv < 0.22 };
+  return { space: mean, ok: cv < maxCv };
 }
 
-export function detectStaves(image: BinaryImage): Staff[] {
+export function detectStaves(
+  image: BinaryImage,
+  options: { inkRatio?: number; maxCv?: number } = {},
+): Staff[] {
+  const inkRatio = options.inkRatio ?? 0.18;
+  const maxCv = options.maxCv ?? 0.22;
   const proj = horizontalProjection(image);
-  const peaks = clusterPeaks(proj, image.width);
+  const peaks = clusterPeaks(proj, image.width, inkRatio);
   const used = new Set<number>();
   const staves: Staff[] = [];
 
@@ -66,7 +71,7 @@ export function detectStaves(image: BinaryImage): Staff[] {
       if (group.length < 5) continue;
       if (group.length === 5) {
         const ys = group.map((g) => g.y);
-        const scored = spacingScore(ys);
+        const scored = spacingScore(ys, maxCv);
         if (scored.ok) {
           best = { idxs: [i, i + 1, i + 2, i + 3, i + 4], space: scored.space };
           break;
@@ -77,7 +82,7 @@ export function detectStaves(image: BinaryImage): Staff[] {
           const idxs = [a, a + 1, a + 2, a + 3, a + 4];
           if (idxs.some((k) => used.has(k))) continue;
           const ys = idxs.map((k) => peaks[k].y);
-          const scored = spacingScore(ys);
+          const scored = spacingScore(ys, maxCv);
           if (scored.ok && (!best || scored.space > 8)) {
             best = { idxs, space: scored.space };
           }

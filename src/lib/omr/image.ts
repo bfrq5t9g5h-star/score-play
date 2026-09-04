@@ -43,19 +43,18 @@ export function toGray(image: RgbaImage): GrayImage {
   return { width: image.width, height: image.height, data };
 }
 
-export function scaleRgba(image: RgbaImage, maxWidth: number): RgbaImage {
-  if (image.width <= maxWidth) return image;
-  const scale = maxWidth / image.width;
-  const width = Math.max(1, Math.round(image.width * scale));
-  const height = Math.max(1, Math.round(image.height * scale));
+export function resizeRgba(image: RgbaImage, width: number, height: number): RgbaImage {
+  if (width === image.width && height === image.height) return image;
   const out = createRgba(width, height);
+  const scaleX = image.width / width;
+  const scaleY = image.height / height;
   for (let y = 0; y < height; y++) {
-    const sy = Math.min(image.height - 1, (y + 0.5) / scale - 0.5);
+    const sy = Math.min(image.height - 1, (y + 0.5) * scaleY - 0.5);
     const y0 = Math.floor(sy);
     const y1 = Math.min(image.height - 1, y0 + 1);
     const fy = sy - y0;
     for (let x = 0; x < width; x++) {
-      const sx = Math.min(image.width - 1, (x + 0.5) / scale - 0.5);
+      const sx = Math.min(image.width - 1, (x + 0.5) * scaleX - 0.5);
       const x0 = Math.floor(sx);
       const x1 = Math.min(image.width - 1, x0 + 1);
       const fx = sx - x0;
@@ -72,6 +71,23 @@ export function scaleRgba(image: RgbaImage, maxWidth: number): RgbaImage {
     }
   }
   return out;
+}
+
+export function scaleRgba(image: RgbaImage, maxWidth: number): RgbaImage {
+  if (image.width <= maxWidth) return image;
+  const scale = maxWidth / image.width;
+  return resizeRgba(image, maxWidth, Math.max(1, Math.round(image.height * scale)));
+}
+
+export function scaleToMaxPixels(image: RgbaImage, maxPixels: number): RgbaImage {
+  const pixels = image.width * image.height;
+  if (pixels <= maxPixels) return image;
+  const scale = Math.sqrt(maxPixels / pixels);
+  return resizeRgba(
+    image,
+    Math.max(1, Math.round(image.width * scale)),
+    Math.max(1, Math.round(image.height * scale)),
+  );
 }
 
 export function inkAt(image: BinaryImage, x: number, y: number): number {
