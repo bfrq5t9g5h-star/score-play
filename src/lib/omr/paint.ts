@@ -164,3 +164,34 @@ export function paintOpenNotes(): PaintedScore {
   ];
   return { image: img, expected, staff: { y: lines, space } };
 }
+
+/** SATB grand-staff phrase used to verify oemer heatmap decoding. */
+export function paintSatbPhrase(): PaintedScore {
+  const space = 14;
+  const x0 = 36;
+  const x1 = 860;
+  const trebleTop = 72;
+  const bassTop = trebleTop + space * 4 + space * 2.6;
+  const treble = [0, 1, 2, 3, 4].map((i) => trebleTop + i * space);
+  const bass = [0, 1, 2, 3, 4].map((i) => bassTop + i * space);
+  const img = createRgba(900, 400, 255, 255, 255, 255);
+  for (const y of treble) drawHLine(img, x0, x1, y, 2);
+  for (const y of bass) drawHLine(img, x0, x1, y, 2);
+  const rx = space * 0.62;
+  const ry = space * 0.42;
+  const columns = [260, 420, 580];
+  const expected: PaintedScore["expected"] = [];
+  for (const x of columns) {
+    const sop = { x, y: treble[4] - 5 * (space / 2), midi: 72, name: "C5" };
+    const alto = { x, y: treble[4] - 0 * (space / 2), midi: 64, name: "E4" };
+    const tenor = { x, y: bass[4] - 7 * (space / 2), midi: 55, name: "G3" };
+    const bassN = { x, y: bass[4] - 3 * (space / 2), midi: 48, name: "C3" };
+    for (const n of [sop, alto, tenor, bassN]) {
+      fillEllipse(img, n.x, n.y, rx, ry);
+      expected.push({ midi: n.midi, name: n.name, x: n.x, y: n.y, quarters: 1 });
+    }
+    drawVLine(img, sop.x + rx - 1, sop.y, sop.y - space * 2.8, 2);
+    drawVLine(img, bassN.x - rx + 1, bassN.y, bassN.y + space * 2.4, 2);
+  }
+  return { image: img, expected, staff: { y: treble, space } };
+}
